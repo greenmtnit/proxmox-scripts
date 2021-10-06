@@ -165,10 +165,33 @@ configure_postfix_main() {
   local file="/etc/postfix/main.cf"
   print_status "Configuring main.cf"
   if [ -f "$file" ]; then
-    cp "$file" "$file".bak"$(date '+%Y%m%d%H%M%S')" 
+    mv "$file" "$file".bak"$(date '+%Y%m%d%H%M%S')" 
   fi
-  sed 's/relayhost\ =/relayhost\ =\ [smtp.office365.com]:587/' $file -i
-  cat <<EOF >> $file
+  #sed 's/relayhost\ =/relayhost\ =\ [smtp.office365.com]:587/' $file -i
+  cat <<EOF > $file
+# See /usr/share/postfix/main.cf.dist for a commented, more complete version
+
+myhostname=$(hostname -f)
+
+smtpd_banner = \$myhostname ESMTP \$mail_name (Debian/GNU)
+biff = no
+
+# appending .domain is the MUA's job.
+append_dot_mydomain = no
+
+# Uncomment the next line to generate "delayed mail" warnings
+#delay_warning_time = 4h
+
+alias_maps = hash:/etc/aliases
+alias_database = hash:/etc/aliases
+mydestination = \$myhostname, localhost.\$mydomain, localhost
+relayhost = [smtp.office365.com]:587
+mynetworks = 127.0.0.0/8
+inet_interfaces = loopback-only
+recipient_delimiter = +
+
+compatibility_level = 2
+
 smtp_use_tls = yes
 smtp_always_send_ehlo = yes
 smtp_sasl_auth_enable = yes
@@ -179,6 +202,7 @@ smtp_tls_security_level = encrypt
 smtp_generic_maps = hash:/etc/postfix/generic
 smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt
 smtp_header_checks = regexp:/etc/postfix/smtp_header_checks
+
 EOF
 }    
 

@@ -21,10 +21,10 @@
 # Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
 PROGNAME=$(basename "$0")
-readonly "$PROGNAME"
+readonly PROGNAME
 
-PROGDIR=$(readlink -m $(dirname "$0"))
-readonly "$PROGDIR"
+PROGDIR=$(readlink -m "$(dirname "$0")")
+readonly PROGDIR
 
 # Print an error message to stderr in red
 print_err() {
@@ -113,9 +113,9 @@ print_status() {
 }
 
 check_proxmox() {
-  if ! $(which pveversion); then
+  if ! which pveversion; then
     die "Fatal: This does not appear to be a Proxmox system."
-  elif ! $(pveversion | grep "pve-manager/7.") ; then
+  elif ! pveversion | grep "pve-manager/7." ; then
     print_err "WARNING! This script is only tested on Proxmox Version 7." 
     read -p "Continue anyway (y/n? " -r
       if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -137,8 +137,8 @@ get_password() {
 install_prereqs() {
   print_status "Installing prereqs"
   local prereqs="postfix mailutils libsasl2-modules"
-  apt-get update
-  apt-get install -y $prereqs
+  apt-get update -q
+  apt-get install -yq "$prereqs"
 }
 
 check_prereqs() {
@@ -146,8 +146,8 @@ check_prereqs() {
   local prereqs=( "postfix" "mailutils" "libsasl2-modules" )
   for prereq in "${prereqs[@]}"
   do
-    if [ $(dpkg-query -W -f='${Status}' "$prereq" 2>/dev/null | grep -c "ok installed") -eq 0 ]; then
-      die "Fatal: "$prereq" not found."
+    if ! dpkg-query -W -f='${Status}' "$prereq" 2>/dev/null | grep -c "ok installed" >/dev/null 2>&1; then
+      die "Fatal: $prereq not found."
     fi
   done
 }
@@ -155,14 +155,18 @@ check_prereqs() {
 configure_proxmox_from() {
   print_status "Configuring Proxmox from: email"
   local file="/etc/pve/user.cfg"
-  cp "$file" "$file".bak"$(date '+%Y%m%d%H%M%S')" 
+  if [ -f "$file" ]; then
+    cp "$file" "$file".bak"$(date '+%Y%m%d%H%M%S')" 
+  fi
   pveum user modify root@pam -email "$dest_addr"
 }
 
 configure_postfix_main() {
   local file="/etc/postfix/main.cf"
   print_status "Configuring main.cf"
-  cp "$file" "$file".bak"$(date '+%Y%m%d%H%M%S')" 
+  if [ -f "$file" ]; then
+    cp "$file" "$file".bak"$(date '+%Y%m%d%H%M%S')" 
+  fi
   sed 's/relayhost\ =/relayhost\ =\ [smtp.office365.com]:587/' $file -i
   cat <<EOF >> $file
 smtp_use_tls = yes
@@ -181,8 +185,10 @@ EOF
 configure_sasl_passwd() {
   local file="/etc/postfix/sasl_passwd"
   print_status "Configuring sasl_passwd"
-  mv "$file" "$file".bak"$(date '+%Y%m%d%H%M%S')" 
-  echo "[smtp.office365.com]:587 "$from_addr":"$password"" > "$file"
+  if [ -f "$file" ]; then
+    cp "$file" "$file".bak"$(date '+%Y%m%d%H%M%S')" 
+  fi
+  echo "[smtp.office365.com]:587 $from_addr:$password" > "$file"
   chown root:root "$file"
   chmod 0600 "$file"
   postmap "$file"
@@ -192,9 +198,11 @@ configure_sasl_passwd() {
 configure_generic() {
   local file="/etc/postfix/generic"
   print_status "Configuring generic"
-  mv "$file" "$file".bak"$(date '+%Y%m%d%H%M%S')" 
-  echo "root@localdomain "$from_addr"" >> "$file"
-  echo "@localdomain "$from_addr"" >> "$file"
+  if [ -f "$file" ]; then
+    mv "$file" "$file".bak"$(date '+%Y%m%d%H%M%S')" 
+  fi
+  echo "root@localdomain $from_addr" >> "$file"
+  echo "@localdomain $from_addr" >> "$file"
   chown root:root "$file"
   chmod 0600 "$file"
   postmap "$file"
@@ -203,8 +211,10 @@ configure_generic() {
 configure_smtp_header_checks() {
   local file="/etc/postfix/smtp_header_checks"
   print_status "Configuring smtp_header_checks"
-  mv "$file" "$file".bak"$(date '+%Y%m%d%H%M%S')" 
-  echo "/^From:.*/ REPLACE From: $(hostname)-alert <"$from_addr">" > $file
+  if [ -f "$file" ]; then
+    mv "$file" "$file".bak"$(date '+%Y%m%d%H%M%S')" 
+  fi
+  echo "/^From:.*/ REPLACE From: $(hostname)-alert <$from_addr>" > $file
   chown root:root "$file"
   chmod 0600 "$file"
 }
@@ -217,9 +227,9 @@ configure_postfix_service() {
 
 send_test_emails() {
   print_status "Sending test emails"
-  echo "This is the test body. Time: "$(date '+%H:%M:%S')"" | mail -s "Test at "$(date '+%H:%M:%S') "$dest_addr" -a "FROM:"$from_addr""
+  echo "Testing regular mail at $(date '+%H:%M:%S')" | mail -s "Test at $(date '+%H:%M:%S')" "$dest_addr" -a "FROM:$from_addr"
   sleep 2
-  echo "Testing Promox mail at "$(date '+%H:%M:%S')"" | /usr/bin/pvemailforward  
+  echo "Testing Promox mail at $(date '+%H:%M:%S')" | /usr/bin/pvemailforward  
 }
  
 main() {

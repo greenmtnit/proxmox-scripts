@@ -54,8 +54,8 @@ show_help() {
 
     
     Examples:
-       Configure sending emails FROM alerts@mydomain.com, to me@mydomain.com. Password for alerts@mailbox is "Password123"
-       $PROGNAME --from alerts@mydomain.com --password "Password123" --destination me@mydomain.com
+       Configure sending emails FROM alerts@mydomain.com, to me@mydomain.com.
+       $PROGNAME -f alerts@mydomain.com -d me@mydomain.com
 EOF
 }
 

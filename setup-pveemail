@@ -138,7 +138,7 @@ install_prereqs() {
   print_status "Installing prereqs"
   local prereqs="postfix mailutils libsasl2-modules"
   apt-get update -q
-  apt-get install -yq "$prereqs"
+  apt-get install -yq $prereqs
 }
 
 check_prereqs() {

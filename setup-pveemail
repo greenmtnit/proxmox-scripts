@@ -249,6 +249,10 @@ configure_postfix_service() {
   systemctl enable postfix
 }
 
+run_newaliases() {
+  newaliases
+}
+
 send_test_emails() {
   print_status "Sending test emails"
   echo "Testing regular mail at $(date '+%H:%M:%S')" | mail -s "Test at $(date '+%H:%M:%S')" "$dest_addr" -a "FROM:$from_addr"
@@ -267,6 +271,7 @@ main() {
   configure_generic
   configure_smtp_header_checks
   configure_postfix_service
+  run_newaliases
   send_test_emails
 
 }

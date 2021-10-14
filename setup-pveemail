@@ -44,12 +44,12 @@ show_help() {
     Usage: $PROGNAME options
     
     This script configures sending email from an Exchange Online (365) mailbox in Proxmox using Postfix. 
-    It install and configures Postfix, then sends two test emails.
+    It installs and configures Postfix, then sends two test emails.
     You will be required to enter the password for the FROM mailbox when running the script.
 
     OPTIONS:
        -f --from              FROM email address, to send alert emails from.
-       -d --destination       Destination to send emails to. 
+       -d --dest              Destination to send emails to. 
        -h --help              Show this help.
 
     

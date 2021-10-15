@@ -59,7 +59,7 @@ show_help() {
     Examples:
        Run the mail setup script, and install the check-zfscapacity and send-bootalert scripts and add them to the crontab.
        Emails are FROM alerts@mydomain.com, alerts sent to me@mydomain.com.
-       $PROGNAME -f alerts@mydomain.com -d me@mydomain.com --setup-pvemail --check-zfscapacity --send-bootalert 
+       $PROGNAME -f alerts@mydomain.com -d me@mydomain.com --setup-pvemail --check-zfs-capacity --send-boot-alert 
 EOF
 }
 
@@ -133,10 +133,11 @@ check_options() {
     show_help
     exit 1
   fi
-  if [[ -n $force ]]; then {
-    $cp_options=
+  if [[ -n $force ]]; then
+    cp_options=
   else
-    $cp_options=
+    cp_options="-n"
+  fi
 }
 
 check_root() {
@@ -153,7 +154,7 @@ run_setup_pvemail() {
       die "$program not found. Exiting."
     fi
     chmod a+x "$program"
-    bash "$program -d $dest_addr -f $from_addr"
+    "$program" -d "$dest_addr" -f "$from_addr"
   fi
 }
 
@@ -165,15 +166,36 @@ install_check_zfs_capacity() {
       die "$program not found. Exiting."
     fi
     chmod a+x "$program"
-    cp "$cp_options" "$program" "/usr/bin"
-    program="/usr/bin/$(basename $program)"
+    cp "$program" "/usr/bin" "$cp_options"
+    program="/usr/bin/$(basename "$program")"
     chmod 755 "$program"
     local command
     command="$program --dest $dest_addr"
     local job
     job="*/5 * * * * $command"
-    crontab -l | fgrep -i -v "$command" | { cat; echo "$job"; } | crontab 
-    bash "$program --dest $dest_addr --test"
+    crontab -l | grep -F -i -v "$command" | { cat; echo "$job"; } | crontab 
+    "$program" --dest "$dest_addr" --test
+  fi
+}
+
+install_send_boot_alert() {
+  if [[ -n $send_boot_alert ]]; then
+    local program
+    program="$PROGDIR/send_boot_alert"
+    if [[ ! -f "$program" ]]; then
+      die "$program not found. Exiting."
+    fi
+    chmod a+x "$program"
+    cp "$program" "/usr/bin" "$cp_options"
+    program="/usr/bin/$(basename "$program")"
+    chmod 755 "$program"
+    local command
+    command="$program --dest $dest_addr"
+    local job
+    job="@reboot $command"
+    crontab -l | grep -F -i -v "$command" | { cat; echo "$job"; } | crontab 
+    "$program" --dest "$dest_addr" --test
+  fi
 }
 
 main() {

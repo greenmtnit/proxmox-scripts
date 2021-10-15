@@ -64,7 +64,7 @@ EOF
 from_addr=
 dest_addr=
 
-if [ -z "$1" ]; then
+if [[ -z "$1" ]]; then
   print_err "No arguments given. This program requires arguments."
   show_help
   exit 
@@ -77,7 +77,7 @@ while :; do
             exit
             ;;
         -f|--from)       # From email address.
-            if [ "$2" ]; then
+            if [[ "$2" ]]; then
                 from_addr="$2"
                 shift
             else
@@ -85,7 +85,7 @@ while :; do
             fi
             ;;
         -d|--dest)       # From email address.
-            if [ "$2" ]; then
+            if [[ "$2" ]]; then
                 dest_addr="$2"
                 shift
             else
@@ -129,7 +129,7 @@ get_password() {
   echo
   read -sp "Confirm password: " password_conf
   echo
-  if [ "$password" != "$password_conf" ]; then
+  if [[ "$password" != "$password_conf" ]]; then
     die "Passwords do not match."
   fi
 }
@@ -155,7 +155,7 @@ check_prereqs() {
 configure_proxmox_from() {
   print_status "Configuring Proxmox from: email"
   local file="/etc/pve/user.cfg"
-  if [ -f "$file" ]; then
+  if [[ -f "$file" ]]; then
     cp "$file" "$file".bak"$(date '+%Y%m%d%H%M%S')" 
   fi
   pveum user modify root@pam -email "$dest_addr"
@@ -164,7 +164,7 @@ configure_proxmox_from() {
 configure_postfix_main() {
   local file="/etc/postfix/main.cf"
   print_status "Configuring main.cf"
-  if [ -f "$file" ]; then
+  if [[ -f "$file" ]]; then
     mv "$file" "$file".bak"$(date '+%Y%m%d%H%M%S')" 
   fi
   #sed 's/relayhost\ =/relayhost\ =\ [smtp.office365.com]:587/' $file -i
@@ -209,7 +209,7 @@ EOF
 configure_sasl_passwd() {
   local file="/etc/postfix/sasl_passwd"
   print_status "Configuring sasl_passwd"
-  if [ -f "$file" ]; then
+  if [[ -f "$file" ]]; then
     cp "$file" "$file".bak"$(date '+%Y%m%d%H%M%S')" 
   fi
   echo "[smtp.office365.com]:587 $from_addr:$password" > "$file"
@@ -222,7 +222,7 @@ configure_sasl_passwd() {
 configure_generic() {
   local file="/etc/postfix/generic"
   print_status "Configuring generic"
-  if [ -f "$file" ]; then
+  if [[ -f "$file" ]]; then
     mv "$file" "$file".bak"$(date '+%Y%m%d%H%M%S')" 
   fi
   echo "root@localdomain $from_addr" >> "$file"
@@ -235,7 +235,7 @@ configure_generic() {
 configure_smtp_header_checks() {
   local file="/etc/postfix/smtp_header_checks"
   print_status "Configuring smtp_header_checks"
-  if [ -f "$file" ]; then
+  if [[ -f "$file" ]]; then
     mv "$file" "$file".bak"$(date '+%Y%m%d%H%M%S')" 
   fi
   echo "/^From:.*/ REPLACE From: $(hostname)-alert <$from_addr>" > $file

@@ -1,0 +1,130 @@
+#!/bin/bash
+#
+# Sends an email alert when a system has booted. 
+# 
+# Original author: Tim West <tim@greenmtnit.com>
+#
+# Copyright (C) 2021 Green Mountain IT Solutions, LLC <info@greenmtnit.com>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
+PROGNAME=$(basename "$0")
+readonly PROGNAME
+
+PROGDIR=$(readlink -m "$(dirname "$0")")
+readonly PROGDIR
+
+# Print an error message to stderr in red
+print_err() {
+  tput setaf 1
+  printf -- '[ERROR] %s\n' "${*}" >&2
+  tput sgr0
+}
+
+# Print an error message in red and exit the script
+die() {
+  print_err "${*}"
+  exit 1
+}
+
+show_help() {
+    cat <<EOF
+    Usage: $PROGNAME options
+
+    This script sends an email alert when the system boots.
+    You should add it to the root crontab with the @reboot option, e.g.
+    @reboot /usr/bin/send_boot_alert
+   
+    You can use the install_scripts script, found at https://github.com/greenmtnit/proxmox-scripts
+    to automatically copy the script to /usr/bin and add an entry to crontab
+    
+    Options:
+       -d --dest              Destination to send emails to. 
+       -h --help              Show this help.
+    Examples:
+       Send a boot alert email to me@mydomain.com:
+       $PROGNAME -d me@mydomain.com
+EOF
+}
+
+# Initialize all the option variables.
+# This ensures we are not contaminated by variables from the environment.
+dest_addr=
+do_test=
+
+if [[ -z "$1" ]]; then
+  print_err "No arguments given. This program requires arguments."
+  show_help
+  exit 
+fi
+
+while :; do
+    case $1 in
+        -h|-\?|--help)
+            show_help    # Display a usage synopsis.
+            exit
+            ;;
+        -d|--dest)       # From email address.
+            if [[ "$2" ]]; then
+                dest_addr="$2"
+                shift
+            else
+                die 'ERROR: "--dest" requires a non-empty option argument.'
+            fi
+	    ;;
+	-t|--test)       # Test mode; sends a message indicating this is only a test.
+	    do_test="1"
+            ;;
+	--)
+            shift
+            break
+	    ;;
+        -?*)
+            printf 'WARNING: Unknown option (ignored): %s\n' "$1" >&2
+            ;;
+        *)               # Default case: No more options, so break out of the loop.
+            break
+    esac
+
+    shift
+done
+
+check_options() {
+  if [[ -z "$dest_addr" ]]; then
+    print_err "You must set a destination email address using --dest."
+    show_help
+    exit 1
+  fi
+}
+
+send_email() {
+  local subject
+  local message
+  if [[ "$do_test" ]]; then
+    subject="TEST Boot Alert Alert on $(hostname -f)"
+    message="THIS IS ONLY A TEST. Warning! The system $(hostname -f) has just booted. Time: $(date '+%a %Y%m%d %H:%M:%S'). If you did not initiate this reboot, you should investigate."
+  else
+    subject="Boot Alert Alert on $(hostname -f)"
+    message="Warning! The system $(hostname -f) has just booted. Time: $(date '+%a %Y%m%d %H:%M:%S'). If you did not initiate this reboot, you should investigate."
+  fi
+  echo "$message" | mail -s "$subject" "$dest_addr" 
+}
+
+main() {
+  check_options
+  send_email
+}
+
+main

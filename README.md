@@ -20,8 +20,11 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
-## setup-pvemail
+## setup_pvemail
 Configures sending emails using postfix.
 
-## zfs-capacity-check
+## check_zfs_capacity
 Checks zpool capacity and sends an email alert if capacity exceeds a specifed threshold.
+
+## send_boot_alert
+Sends an email alert when the system boots.

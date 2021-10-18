@@ -1,0 +1,177 @@
+#!/bin/bash
+#
+# Installs and configures smartd, the SMART monitoring daemon
+# 
+# Original author: Tim West <tim@greenmtnit.com>
+#
+# Copyright (C) 2021 Green Mountain IT Solutions, LLC <info@greenmtnit.com>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
+PROGNAME=$(basename "$0")
+readonly PROGNAME
+
+PROGDIR=$(readlink -m "$(dirname "$0")")
+readonly PROGDIR
+
+# Print an error message to stderr in red
+print_err() {
+  tput setaf 1
+  printf -- '[ERROR] %s\n' "${*}" >&2
+  tput sgr0
+}
+
+# Print an error message in red and exit the script
+die() {
+  print_err "${*}"
+  exit 1
+}
+
+show_help() {
+    cat <<EOF
+    Usage: $PROGNAME options
+
+    [DESCRIPTION HERE, REMEMEMBER TO EDIT OPTIONS]
+    
+    This script does some things to automate doing a thing.
+    First it does one thing, then a second thing.
+    You will need to do the thing when running the scripting.
+
+    Options:
+       -d --dest              Destination to send emails to. 
+       --disk                 A comma-separated list of disks (no spaces!) to monitor, e.g. "sda,sdb,sdc"
+       -h --help              Show this help.
+
+    
+    Examples:
+       Configure smartd monitoring for sda, sdb, and sdc. Send alerts to me@mydomain.com
+       $PROGNAME -d me@mydomain.com --disk sda,sdb,sdc
+EOF
+}
+
+# Initialize all the option variables.
+# This ensures we are not contaminated by variables from the environment.
+dest_addr=
+disks=
+
+if [ -z "$1" ]; then
+  print_err "No arguments given. This program requires arguments."
+  show_help
+  exit 
+fi
+
+while :; do
+    case $1 in
+        -h|-\?|--help)
+            show_help    # Display a usage synopsis.
+            exit
+            ;;
+        -d|--dest)       # Destination email address.
+            if [ "$2" ]; then
+                dest_addr="$2"
+                shift
+            else
+                die 'ERROR: "--dest" requires a non-empty option argument.'
+            fi
+            ;;
+        --disk)       # List of disks.
+            if [ "$2" ]; then
+	        #disks=($2)
+		IFS=',' read -r -a disks <<< "$2"
+                shift
+            else
+                die 'ERROR: "--disk" requires a non-empty option argument.'
+            fi
+            ;;
+        --)              # End of all options.
+            shift
+            break
+            ;;
+        -?*)
+            printf 'WARNING: Unknown option (ignored): %s\n' "$1" >&2
+            ;;
+        *)               # Default case: No more options, so break out of the loop.
+            break
+    esac
+
+    shift
+done
+
+check_options() {
+  if [ -z "$dest_addr" ]; then
+    print_err "You must set a destination email address using --dest."
+    show_help
+    exit 1
+  fi
+  
+  if [ -z "$disks" ]; then
+    print_err "You must provide a disk or list of disks using --disk."
+    show_help
+    exit 1
+  fi
+}
+
+
+install_prereqs() {
+  print_status "Installing prereqs"
+  local prereqs="smartmontools"
+  apt-get update -q
+  apt-get install -yq $prereqs
+}
+
+initialize_config() {
+  local file="/etc/smartd.conf"
+  if [[ -f "$file" ]]; then
+    cp "$file" "$file".bak"$(date '+%Y%m%d%H%M%S')" 
+    echo > "$file"
+  fi
+}
+
+add_disks() {
+  local file="/etc/smartd.conf"
+  for disk in "${disks[@]}"; do
+    disk_id=$(ls -ld /dev/disk/by-id/* | grep "$disk$" | grep "wwn")
+    if [[ -n $disk_id ]]; then 
+      echo "$disk_id" | awk -v dest_addr="$dest_addr" '{ print $9,"-a -o on -S on -n standby,q -s (S/../../3/03|L/../../7/03) -m " dest_addr " #",$10,$11 }'\
+        >> $file
+    else
+      print_err "Disk ID not found for $disk. It will NOT be added to smartd monitoring!"
+    fi
+  done
+}
+
+do_test() {
+  local file="/etc/smartd.conf.test"
+  echo "/dev/sda -a -o on -S on -n standby,q -s (S/../../3/03|L/../../6/05) -m $dest_addr -M test" > "$file" 
+  systemctl stop smartd
+  smartd -c "$file"
+  sleep 5 
+  pkill smartd > /dev/null
+}
+
+configure_service() {
+  systemctl start smartd
+  systemctl enable smartd
+}
+
+main() {
+  check_options
+  install_prereqs	
+  add_disks
+  do_test
+  configure_service
+}
+
+main

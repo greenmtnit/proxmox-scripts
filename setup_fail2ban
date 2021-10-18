@@ -1,0 +1,191 @@
+#!/bin/bash
+#
+# Installs and configures fail2ban 
+# 
+# Original author: Tim West <tim@greenmtnit.com>
+#
+# Copyright (C) 2021 Green Mountain IT Solutions, LLC <info@greenmtnit.com>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
+PROGNAME=$(basename "$0")
+readonly PROGNAME
+
+PROGDIR=$(readlink -m "$(dirname "$0")")
+readonly PROGDIR
+
+# Print a status message
+print_status() {
+  echo
+  echo "$1..."
+  echo
+}
+
+# Print an error message to stderr in red
+print_err() {
+  tput setaf 1
+  printf -- '[ERROR] %s\n' "${*}" >&2
+  tput sgr0
+}
+
+# Print an error message in red and exit the script
+die() {
+  print_err "${*}"
+  exit 1
+}
+
+show_help() {
+    cat <<EOF
+    Usage: $PROGNAME options
+    
+    Installs and configures fail2ban.
+    By default, will confiugre monitoring for SSH.
+    Optionally, configures monitoring for Proxmox.
+
+    Options:
+       --bantime              Ban time for blocked IPs. Default = 3600 seconds (1 hour)
+       --proxmox              Configure optional monitoring for Proxmox.
+       -h --help              Show this help.
+
+    
+    Examples:
+       Configure monitoring for SSH (default) and Proxmox.
+       
+       $PROGNAME -f alerts@mydomain.com -d me@mydomain.com
+EOF
+}
+
+# Initialize all the option variables.
+# This ensures we are not contaminated by variables from the environment.
+bantime="3600"
+proxmox=
+
+while :; do
+    case $1 in
+        -h|-\?|--help)
+            show_help    # Display a usage synopsis.
+            exit
+            ;;
+        --bantime)       # Ban time for violations.
+            if [[ -z "$2" ]]; then
+                die 'ERROR: "--bantime" requires a non-empty option argument.'
+	    elif [[ "$2" =~ ^[0-9]+$ ]]; then
+                bantime="$2"
+                shift
+            else
+                die 'ERROR: "--bantime" requires a number.'
+            fi
+            ;;
+        --proxmox)       # Enable Proxmox monitoring. 
+            proxmox=1
+            ;;
+        --)              # End of all options.
+            shift
+            break
+            ;;
+        -?*)
+            printf 'WARNING: Unknown option (ignored): %s\n' "$1" >&2
+            ;;
+        *)               # Default case: No more options, so break out of the loop.
+            break
+    esac
+    shift
+done
+
+install_prereqs() {
+  print_status "Installing prereqs"
+  local prereqs="fail2ban"
+  apt-get update -q
+  apt-get install -yq $prereqs
+}
+
+check_prereqs() {
+  print_status "Checking prereqs"
+  local prereqs=( "fail2ban" )
+  for prereq in "${prereqs[@]}"
+  do
+    if ! dpkg-query -W -f='${Status}' "$prereq" 2>/dev/null | grep -c "ok installed" >/dev/null 2>&1; then
+      die "Fatal: $prereq not found."
+    fi
+  done
+}
+
+create_config() {
+  local file="/etc/fail2ban/jail.conf"
+  local localfile="/etc/fail2ban/jail.local"
+  if [[ -f "$localfile" ]]; then
+    cp "$file" "$file".bak"$(date '+%Y%m%d%H%M%S')" 
+  fi
+  if [[ -f "$file" ]]; then
+    cp "$file" "$localfile" 
+  else
+    die "$file not found! Cannot configure fail2ban!"
+  fi
+}
+
+configure_global() {
+  local localfile="/etc/fail2ban/jail.local"
+  sed '/YOU SHOULD NOT MODIFY THIS FILE/d' "$localfile" -i 
+  sed '/It will probably be overwritten or improved/d' "$localfile" -i 
+  local defaultfile="/etc/fail2ban/jail.d/99_defaults.local"
+  if [[ -f "$defaultfile" ]]; then
+    cp "$defaultfile" "$defaultfile".bak"$(date '+%Y%m%d%H%M%S')" 
+  fi
+  cat << EOF > "$defaultfile" 
+[DEFAULT]
+bantime  = 3600
+EOF
+}
+
+configure_proxmox() {
+  if [[ -n "$proxmox" ]]; then
+    local localfile="/etc/fail2ban/jail.d/proxmox.local"
+    cat << EOF > "$localfile"
+
+[proxmox]
+enabled = true
+port = https,http,8006
+filter = proxmox
+logpath = /var/log/daemon.log
+maxretry = 3
+# 1 hour
+bantime = 3600
+
+EOF
+    local filterfile="/etc/fail2ban/filter.d/proxmox.conf"
+    cat << EOF > "$filterfile"
+[Definition]
+failregex = pvedaemon\[.*authentication failure; rhost=<HOST> user=.* msg=.*
+ignoreregex =
+EOF
+  fi
+
+}
+
+configure_service() {
+  systemctl restart fail2ban
+  systemctl enable fail2ban
+}
+
+main() {
+  install_prereqs
+  check_prereqs
+  create_config
+  configure_global
+  configure_proxmox
+  configure_service
+}
+
+main

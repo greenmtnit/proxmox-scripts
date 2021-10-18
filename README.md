@@ -31,3 +31,6 @@ Checks zpool capacity and sends an email alert if capacity exceeds a specifed th
 
 ## send_boot_alert
 Sends an email alert when the system boots.
+
+## setup_smartd
+Configures disk health monitoring with the smartmontools smartd daemon

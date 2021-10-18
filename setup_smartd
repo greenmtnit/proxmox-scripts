@@ -26,6 +26,13 @@ readonly PROGNAME
 PROGDIR=$(readlink -m "$(dirname "$0")")
 readonly PROGDIR
 
+# Print a status message
+print_status() {
+  echo
+  echo "$1..."
+  echo
+}
+
 # Print an error message to stderr in red
 print_err() {
   tput setaf 1
@@ -135,7 +142,7 @@ initialize_config() {
   local file="/etc/smartd.conf"
   if [[ -f "$file" ]]; then
     cp "$file" "$file".bak"$(date '+%Y%m%d%H%M%S')" 
-    echo > "$file"
+    > "$file"
   fi
 }
 
@@ -155,20 +162,21 @@ add_disks() {
 do_test() {
   local file="/etc/smartd.conf.test"
   echo "/dev/sda -a -o on -S on -n standby,q -s (S/../../3/03|L/../../6/05) -m $dest_addr -M test" > "$file" 
-  systemctl stop smartd
+  systemctl stop smartmontools
   smartd -c "$file"
-  sleep 5 
-  pkill smartd > /dev/null
+  sleep 3 
+  pkill -f "smartd -c $file" > /dev/null
 }
 
 configure_service() {
-  systemctl start smartd
-  systemctl enable smartd
+  systemctl start smartmontools
+  systemctl enable smartmontools
 }
 
 main() {
   check_options
   install_prereqs	
+  initialize_config
   add_disks
   do_test
   configure_service

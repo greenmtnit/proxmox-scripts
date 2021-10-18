@@ -52,14 +52,18 @@ show_help() {
        -h --help              Show this help.
        --setup-pvemail        Run script to configure sending emails with postscript. Requires you to provide an app password for the FROM email address.
        --check-zfs-capacity   Copy the check-zfscapacity script to /usr/bin, make it executable, and add an entry to the system crontab to run the script every 5 minutes. 
-       --send-boot-alert       Copy the send-bootalert script to /usr/bin, make it executable, and add an entry to the system crontab to run the script on boot. 
+       --send-boot-alert      Copy the send-bootalert script to /usr/bin, make it executable, and add an entry to the system crontab to run the script on boot. 
+       --setup-smartd         Configure smartmontools smartd monitoring
        --force                Overwrite existing files, i.e. in /usr/bin
        
     
     Examples:
-       Run the mail setup script, and install the check-zfscapacity and send-bootalert scripts and add them to the crontab.
+       Run the mail setup script, and install the check_zfs_capacity and send_boot_alert scripts and add them to the crontab.
        Emails are FROM alerts@mydomain.com, alerts sent to me@mydomain.com.
        $PROGNAME -f alerts@mydomain.com -d me@mydomain.com --setup-pvemail --check-zfs-capacity --send-boot-alert 
+       
+       Install check_zfs_capacity script and setup smartd monitoring for disks sda, sdb, and sdc
+       $PROGNAME -d me@mydomain.com --send-boot-alert --setup-smartd --disk "sda,sdb,sdc"
 EOF
 }
 
@@ -67,6 +71,12 @@ EOF
 # This ensures we are not contaminated by variables from the environment.
 from_addr=
 dest_addr=
+setup_pvemail=
+check_zfs_capacity=
+send_boot_alert=
+setup_smartd=
+disks=
+force=
 
 if [ -z "$1" ]; then
   print_err "No arguments given. This program requires arguments."
@@ -105,7 +115,18 @@ while :; do
         --send-boot-alert)     # Copy the send-bootalert script to /usr/bin, make executable, and add a crontab entry to run on boot
             send_boot_alert=1
 	    ;;
-        --force)              # Overwrite existing exeutables in /usr/bin if they exist
+	--setup_smartd)       # Configure disk monitoring for with smartctl smartd monitoring. Requires --disk
+	    setup_smartd=1
+	    ;;	
+        --disk)                # List of disk(s) to configure smartctl monitoring for. Comma-separated, no spaces, e.g. "sda,sdb,sdc"
+            if [ "$2" ]; then
+	        disks=$2
+                shift
+            else
+                die 'ERROR: "--disk" requires a non-empty option argument.'
+            fi
+            ;;
+        --force)              # Overwrite existing executables in /usr/bin if they exist
             force=1
 	    ;;
         --)                   # End of all options.
@@ -198,12 +219,25 @@ install_send_boot_alert() {
   fi
 }
 
+run_setup_smartd() {
+  if [[ -n $setup_smartd ]]; then 
+    local program
+    program="$PROGDIR/setup_smartd"
+    if [[ ! -f "$program" ]]; then
+      die "$program not found. Exiting."
+    fi
+    chmod a+x "$program"
+    "$program" -d "$dest_addr" --disk "$disks"
+  fi
+}
+
 main() {
   check_root
   check_options
   run_setup_pvemail
   install_check_zfs_capacity
   install_send_boot_alert
+  run_setup_smartd
 }
 
 main

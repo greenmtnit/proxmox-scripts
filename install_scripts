@@ -26,6 +26,13 @@ readonly PROGNAME
 PROGDIR=$(readlink -m "$(dirname "$0")")
 readonly PROGDIR
 
+# Print a status message
+print_status() {
+  echo
+  echo "$1..."
+  echo
+}
+
 # Print an error message to stderr in red
 print_err() {
   tput setaf 1
@@ -49,12 +56,13 @@ show_help() {
     Options:
        -d --dest              Destination email for alerts send by the scripts. 
        -f --from              Email to send alerts from. You need to supply an app password for this mailbox.
+       --force                Overwrite existing files, i.e. in /usr/bin
        -h --help              Show this help.
-       --setup-pvemail        Run script to configure sending emails with postscript. Requires you to provide an app password for the FROM email address.
        --check-zfs-capacity   Copy the check-zfscapacity script to /usr/bin, make it executable, and add an entry to the system crontab to run the script every 5 minutes. 
        --send-boot-alert      Copy the send-bootalert script to /usr/bin, make it executable, and add an entry to the system crontab to run the script on boot. 
+       --setup-fail2ban       Configure fail2ban for SSH and Proxmox GUI, with bantime of 3600 seconds (1 hour)
+       --setup-pvemail        Run script to configure sending emails with postscript. Requires you to provide an app password for the FROM email address.
        --setup-smartd         Configure smartmontools smartd monitoring
-       --force                Overwrite existing files, i.e. in /usr/bin
        
     
     Examples:
@@ -71,12 +79,13 @@ EOF
 # This ensures we are not contaminated by variables from the environment.
 from_addr=
 dest_addr=
-setup_pvemail=
+force=
 check_zfs_capacity=
 send_boot_alert=
+setup_fail2ban=
+setup_pvemail=
 setup_smartd=
 disks=
-force=
 
 if [ -z "$1" ]; then
   print_err "No arguments given. This program requires arguments."
@@ -90,14 +99,6 @@ while :; do
             show_help         # Display a usage synopsis.
             exit
             ;;
-        -f|--from)            # From email address to send alerts from. Password for this mailbox is required.
-            if [ "$2" ]; then
-                from_addr="$2"
-                shift
-            else
-                die 'ERROR: "--from" requires a non-empty option argument.'
-            fi
-            ;;
         -d|--dest)            # Destination email address to send alerts to.
             if [ "$2" ]; then
                 dest_addr="$2"
@@ -106,14 +107,28 @@ while :; do
                 die 'ERROR: "--dest" requires a non-empty option argument.'
             fi
             ;;
-        --setup-pvemail)      # Configure sending of email alerts from postfix. Requires --from and --dest
-            setup_pvemail=1
+        -f|--from)            # From email address to send alerts from. Password for this mailbox is required.
+            if [ "$2" ]; then
+                from_addr="$2"
+                shift
+            else
+                die 'ERROR: "--from" requires a non-empty option argument.'
+            fi
+            ;;
+        --force)              # Overwrite existing executables in /usr/bin if they exist
+            force=1
 	    ;;
         --check-zfs-capacity)  # Copy the check-zfscapacity script to /usr/bin, make executable, and add a crontab entry to run once every 5 minutes
             check_zfs_capacity=1
 	    ;;
         --send-boot-alert)     # Copy the send-bootalert script to /usr/bin, make executable, and add a crontab entry to run on boot
             send_boot_alert=1
+	    ;;
+	--setup-fail2ban)     # Install and configure fail2ban for SSH and Proxmox
+	    setup_fail2ban=1
+	    ;;
+        --setup-pvemail)      # Configure sending of email alerts from postfix. Requires --from and --dest
+            setup_pvemail=1
 	    ;;
 	--setup_smartd)       # Configure disk monitoring for with smartctl smartd monitoring. Requires --disk
 	    setup_smartd=1
@@ -126,9 +141,6 @@ while :; do
                 die 'ERROR: "--disk" requires a non-empty option argument.'
             fi
             ;;
-        --force)              # Overwrite existing executables in /usr/bin if they exist
-            force=1
-	    ;;
         --)                   # End of all options.
             shift
             break
@@ -144,20 +156,22 @@ while :; do
 done
 
 check_options() {
-  if [[ -n "$setup_pvemail" && (-z "$dest_addr" || -z "$from_addr") ]]; then  
-    print_err "You must set from and destination email addresses using --from and --dest when using --setup-pvemail"
-    show_help
-    exit 1
+  if [[ -n "$force" ]]; then
+    cp_options=
+  else
+    cp_options="-n"
   fi
-  if [[ ($check_zfs_capacity || $send_boot_alert) && -z "$dest_addr" ]]; then  
+
+  if [[ ("$check_zfs_capacity" || "$send_boot_alert") && -z "$dest_addr" ]]; then  
     print_err "You must set a destination email address using --dest when using --check-zfs-capacity or --send-boot-alert"
     show_help
     exit 1
   fi
-  if [[ -n $force ]]; then
-    cp_options=
-  else
-    cp_options="-n"
+
+  if [[ -n "$setup_pvemail" && (-z "$dest_addr" || -z "$from_addr") ]]; then  
+    print_err "You must set from and destination email addresses using --from and --dest when using --setup-pvemail"
+    show_help
+    exit 1
   fi
 }
 
@@ -168,7 +182,8 @@ check_root() {
 }
 
 run_setup_pvemail() {
-  if [[ -n $setup_pvemail ]]; then
+  if [[ -n "$setup_pvemail" ]]; then
+    print_status "Setting up PVE mail"
     local program
     program="$PROGDIR/setup_pvemail"
     if [[ ! -f "$program" ]]; then
@@ -180,7 +195,8 @@ run_setup_pvemail() {
 }
 
 install_check_zfs_capacity() {
-  if [[ -n $check_zfs_capacity ]]; then
+  if [[ -n "$check_zfs_capacity" ]]; then
+    print_status "Installing check_zfs_capacity"
     local program
     program="$PROGDIR/check_zfs_capacity"
     if [[ ! -f "$program" ]]; then
@@ -200,7 +216,8 @@ install_check_zfs_capacity() {
 }
 
 install_send_boot_alert() {
-  if [[ -n $send_boot_alert ]]; then
+  if [[ -n "$send_boot_alert" ]]; then
+    print_status "Installing send_boot_alert"
     local program
     program="$PROGDIR/send_boot_alert"
     if [[ ! -f "$program" ]]; then
@@ -219,8 +236,22 @@ install_send_boot_alert() {
   fi
 }
 
+run_setup_fail2ban() {
+  if [[ -n "$setup_fail2ban" ]]; then 
+    print_status "Setting up fail2ban"
+    local program
+    program="$PROGDIR/setup_fail2ban"
+    if [[ ! -f "$program" ]]; then
+      die "$program not found. Exiting."
+    fi
+    chmod a+x "$program"
+    "$program" --proxmox
+  fi
+}
+
 run_setup_smartd() {
-  if [[ -n $setup_smartd ]]; then 
+  if [[ -n "$setup_smartd" ]]; then 
+    print_status "Setting up smartd"
     local program
     program="$PROGDIR/setup_smartd"
     if [[ ! -f "$program" ]]; then
@@ -237,6 +268,7 @@ main() {
   run_setup_pvemail
   install_check_zfs_capacity
   install_send_boot_alert
+  run_setup_fail2ban
   run_setup_smartd
 }
 

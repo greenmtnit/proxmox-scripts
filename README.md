@@ -23,14 +23,25 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 ## install_scripts
 Master script to configure other scripts.
 
+## do_basics
+This script runs some basic setup steps for Proxmox, including:
+  - Configuring updates
+  - Installs commonly used packages
+  - Configuring the MOTD
+  - Customizing the terminal
+
 ## setup_pvemail
 Configures sending emails using postfix.
 
 ## check_zfs_capacity
 Checks zpool capacity and sends an email alert if capacity exceeds a specifed threshold.
 
+
 ## send_boot_alert
 Sends an email alert when the system boots.
+
+## setup_fail2ban
+Configures fail2ban monitoring for SSH and the Proxmox GUI.
 
 ## setup_smartd
 Configures disk health monitoring with the smartmontools smartd daemon

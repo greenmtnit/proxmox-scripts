@@ -59,6 +59,7 @@ show_help() {
        --force                Overwrite existing files, i.e. in /usr/bin
        -h --help              Show this help.
        --check-zfs-capacity   Copy the check-zfscapacity script to /usr/bin, make it executable, and add an entry to the system crontab to run the script every 5 minutes. 
+       --do-basics            Run the do_basics script to configure updates, install common packages, configure the MOTD, and customize the terminal prompt. 
        --send-boot-alert      Copy the send-bootalert script to /usr/bin, make it executable, and add an entry to the system crontab to run the script on boot. 
        --setup-fail2ban       Configure fail2ban for SSH and Proxmox GUI, with bantime of 3600 seconds (1 hour)
        --setup-pvemail        Run script to configure sending emails with postscript. Requires you to provide an app password for the FROM email address.
@@ -80,6 +81,7 @@ EOF
 from_addr=
 dest_addr=
 force=
+do_basics=
 check_zfs_capacity=
 send_boot_alert=
 setup_fail2ban=
@@ -120,6 +122,9 @@ while :; do
 	    ;;
         --check-zfs-capacity)  # Copy the check-zfscapacity script to /usr/bin, make executable, and add a crontab entry to run once every 5 minutes
             check_zfs_capacity=1
+	    ;;
+        --do-basics)            # Run the do_basics script to configure updates, install common packages, configure the MOTD, and customize the terminal prompt. 
+	    do_basics=1 
 	    ;;
         --send-boot-alert)     # Copy the send-bootalert script to /usr/bin, make executable, and add a crontab entry to run on boot
             send_boot_alert=1
@@ -180,6 +185,18 @@ check_root() {
     die "Script must be run as root!"
   fi
 }
+
+run_do_basics() {
+  if [[ -n "$do_basics" ]]; then
+    print_status "Running basics"
+    local program
+    program="$PROGDIR/do_basics"
+    if [[ ! -f "$program" ]]; then
+      die "$program not found. Exiting."
+    fi
+    chmod a+x "$program"
+    "$program" 
+  fi
 
 run_setup_pvemail() {
   if [[ -n "$setup_pvemail" ]]; then

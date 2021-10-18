@@ -45,3 +45,6 @@ Configures fail2ban monitoring for SSH and the Proxmox GUI.
 
 ## setup_smartd
 Configures disk health monitoring with the smartmontools smartd daemon
+
+## backup
+Backs up Proxmox config files

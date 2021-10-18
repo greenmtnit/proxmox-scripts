@@ -135,7 +135,7 @@ while :; do
         --setup-pvemail)      # Configure sending of email alerts from postfix. Requires --from and --dest
             setup_pvemail=1
 	    ;;
-	--setup_smartd)       # Configure disk monitoring for with smartctl smartd monitoring. Requires --disk
+	--setup-smartd)       # Configure disk monitoring for with smartctl smartd monitoring. Requires --disk
 	    setup_smartd=1
 	    ;;	
         --disk)                # List of disk(s) to configure smartctl monitoring for. Comma-separated, no spaces, e.g. "sda,sdb,sdc"
@@ -178,6 +178,12 @@ check_options() {
     show_help
     exit 1
   fi
+
+  if [[ -n "$setup_smartd" && -z "$disks" ]]; then  
+	  print_err "You must provide a list of disk(s) using --disk when using --setup-smartd"
+    show_help
+    exit 1
+  fi
 }
 
 check_root() {
@@ -197,6 +203,7 @@ run_do_basics() {
     chmod a+x "$program"
     "$program" 
   fi
+}
 
 run_setup_pvemail() {
   if [[ -n "$setup_pvemail" ]]; then
@@ -282,6 +289,7 @@ run_setup_smartd() {
 main() {
   check_root
   check_options
+  run_do_basics
   run_setup_pvemail
   install_check_zfs_capacity
   install_send_boot_alert

@@ -53,6 +53,7 @@ show_help() {
     Options:
        -d --dest              Destination to send emails to. 
        -h --help              Show this help.
+       -t --test              Test mode; send a test email.
     Examples:
        Send a boot alert email to me@mydomain.com:
        $PROGNAME -d me@mydomain.com

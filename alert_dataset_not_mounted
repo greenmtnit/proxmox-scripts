@@ -1,0 +1,141 @@
+#!/bin/bash
+#
+# Sends an email alert if ZFS datasets are not mounted.
+# 
+# Original author: Tim West <tim@greenmtnit.com>
+#
+# Copyright (C) 2021 Green Mountain IT Solutions, LLC <info@greenmtnit.com>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
+PROGNAME=$(basename "$0")
+readonly PROGNAME
+
+PROGDIR=$(readlink -m "$(dirname "$0")")
+readonly PROGDIR
+
+# Print a status message
+print_status() {
+  echo
+  echo "$1..."
+  echo
+}
+
+# Print an error message to stderr in red
+print_err() {
+  tput setaf 1
+  printf -- '[ERROR] %s\n' "${*}" >&2
+  tput sgr0
+}
+
+# Print an error message in red and exit the script
+die() {
+  print_err "${*}"
+  exit 1
+}
+
+show_help() {
+    cat <<EOF
+    Usage: $PROGNAME options
+
+    Sends an alert if ZFS datasets are not mounted.
+
+    Options:
+       -d --dest              Destination to send emails to. 
+       -h --help              Show this help.
+    
+    Examples:
+       Send an alert to me@mydomain.com
+       $PROGNAME -d me@mydomain.com
+EOF
+}
+
+# Initialize all the option variables.
+# This ensures we are not contaminated by variables from the environment.
+dest_addr=
+
+if [ -z "$1" ]; then
+  print_err "No arguments given. This program requires arguments."
+  show_help
+  exit 
+fi
+
+while :; do
+    case $1 in
+        -h|-\?|--help)
+            show_help    # Display a usage synopsis.
+            exit
+            ;;
+        -d|--dest)       # Destination email address.
+            if [ "$2" ]; then
+                dest_addr="$2"
+                shift
+            else
+                die 'ERROR: "--dest" requires a non-empty option argument.'
+            fi
+            ;;
+        --)              # End of all options.
+            shift
+            break
+            ;;
+        -?*)
+            printf 'WARNING: Unknown option (ignored): %s\n' "$1" >&2
+            ;;
+        *)               # Default case: No more options, so break out of the loop.
+            break
+    esac
+    shift
+done
+
+check_options() {
+  if [ -z "$dest_addr" ]; then
+    print_err "You must set a destination email address using --dest."
+    show_help
+    exit 1
+  fi
+}
+
+get_datasets() {
+  readarray -t datasets < <(zfs list -o mountpoint | tail -n +2)
+}
+
+check_mounts() {
+  alert=
+  for dataset in "${datasets[@]}"; do
+    if ! df | grep -q "$dataset"; then 
+      alert=1
+      #echo "$dataset is not mounted"
+    fi
+  done
+}
+
+send_alert() {
+  if [[ -n "$alert" ]]; then
+    local message
+    message="Warning! One or more ZFS datasets are not mounted on $(hostname -f). Time: $(date '+%a %Y%m%d %H:%M:%S')."
+    local subject
+    subject="ZFS Dataset unmounted alert on $(hostname -f)"
+    echo "$message" | mail -s "$subject" "$dest_addr" 
+  fi
+}
+
+main() {
+  check_options
+  get_datasets
+  check_mounts 
+  send_alert
+}
+
+main

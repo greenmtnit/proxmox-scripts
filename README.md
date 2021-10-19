@@ -48,3 +48,6 @@ Configures disk health monitoring with the smartmontools smartd daemon
 
 ## backup
 Backs up Proxmox config files
+
+## alert_dataset_not_mounted
+Sends an alert if any one ZFS dataset is not mounted.

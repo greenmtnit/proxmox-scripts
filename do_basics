@@ -167,7 +167,6 @@ configure_terminal() {
   cat << EOF > "$file"
 export PROMPT_COMMAND='export PS1="\[\e]0;\u@\h\a\]\[\033[1;$value\]\${debian_chroot:+(\$debian_chroot)}\u@\h:\w\\$\[\033[0m\] "'
 EOF
-  exec bash --login
 }
 
 main() {

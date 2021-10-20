@@ -162,7 +162,7 @@ EOF
 
 configure_terminal() {
   if [[ -z "$color" ]]; then 
-    local colors=(31 32 33 35 36 37 91 92 93 94 95 96)
+    local colors=(31 33 35 36 37 91 93 94 95 96)
     color=${colors[RANDOM%${#colors[@]}]}
   fi
   value="$color""m"

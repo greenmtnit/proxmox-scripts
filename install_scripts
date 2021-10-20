@@ -64,6 +64,7 @@ show_help() {
        --setup-fail2ban       Configure fail2ban for SSH and Proxmox GUI, with bantime of 3600 seconds (1 hour)
        --setup-pvemail        Run script to configure sending emails with postscript. Requires you to provide an app password for the FROM email address.
        --setup-smartd         Configure smartmontools smartd monitoring
+        --disk                List of disk(s) to configure smartctl monitoring for. Comma-separated, no spaces, e.g. "sda,sdb,sdc"
        
     
     Examples:

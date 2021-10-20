@@ -58,6 +58,7 @@ show_help() {
 
     Options:
        -h --help              Show this help.
+       --configure_updates    Configure apt updates (upgrades)
        --color                Set the terminal prompt color, using a number from 1 to 255 (default = random selection)
        --show-colors          Print available terminal colors and exit.
     
@@ -95,6 +96,9 @@ while :; do
                 die 'ERROR: "--color" requires a number between 1 and 255. Use --show-colors to display available colors..'
             fi
             ;;
+	--configure-updates) #Configure updates (upgrades)
+          configure_updates="1"
+	  ;;
 	--show-colors)   # Show available terminal colors, then exit.
 	   show_colors
 	   exit
@@ -113,11 +117,12 @@ while :; do
 done
 
 configure_updates() {
-  local enterprisefile="/etc/apt/sources.list.d/pve-enterprise.list"
-  rm -f "$enterprisefile"
-  local sources="/etc/apt/sources.list"
-  cp "$sources" "$sources".bak"$(date '+%Y%m%d%H%M%S')" 
-  cat << EOF > "$sources"
+  if [[ -n "$configure_updates" ]]; then
+    local enterprisefile="/etc/apt/sources.list.d/pve-enterprise.list"
+    rm -f "$enterprisefile"
+    local sources="/etc/apt/sources.list"
+    cp "$sources" "$sources".bak"$(date '+%Y%m%d%H%M%S')" 
+    cat << EOF > "$sources"
 deb http://ftp.debian.org/debian bullseye main contrib
 deb http://ftp.debian.org/debian bullseye-updates main contrib
 
@@ -127,8 +132,9 @@ deb http://download.proxmox.com/debian/pve bullseye pve-no-subscription
 # security updates
 deb http://security.debian.org/debian-security bullseye-security main contrib
 EOF
-  apt-get update -q
-  apt-get dist-upgrade -y
+    apt-get update -q
+    apt-get dist-upgrade -y
+  fi
 }
 
 install_packages() {

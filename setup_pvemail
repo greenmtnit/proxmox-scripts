@@ -125,7 +125,7 @@ check_proxmox() {
 }
 
 get_password() {
-  read -sp "Enter your password: " password
+  read -sp "Enter your password for mailbox $from_addr: " password
   echo
   read -sp "Confirm password: " password_conf
   echo

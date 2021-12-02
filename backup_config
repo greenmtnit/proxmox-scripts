@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Automates backup of Proxmox Virtual Environment config files, e.g. /etc/pve.
+# Automates backup of Proxmox Virtual Environment config files
 #
 # Original Author: DerDanilo (https://github.com/DerDanilo)
 # Adapted by Tim West from https://github.com/DerDanilo/proxmox-stuff
@@ -9,7 +9,7 @@
 # is copyright © 2021 Green Mountain IT Solutions, LLC, and is licensed
 # under the terms of LICENSE, the GNU General Public License Version 3,
 # EXCEPT this file backup_config, adapted from https://github.com/DerDanilo/proxmox-stuff/,
-# copyright © 2018 DerDanilo and license under the terms of MIT_LICENSE. 
+# copyright © 2018 DerDanilo and licensed under the terms of MIT_LICENSE. 
 #
 # MIT License
 #

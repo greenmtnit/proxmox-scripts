@@ -1,3 +1,10 @@
+All code in this repo, https://github.com/greenmtnit/proxmox-scripts,
+is copyright © 2021 Green Mountain IT Solutions, LLC, and is licensed
+under the terms of LICENSE, the GNU General Public License Version 3,
+EXCEPT file backup_config, adapted from https://github.com/DerDanilo/proxmox-stuff/,
+copyright © 2018 DerDanilo and license under the terms of MIT_LICENSE. 
+
+
                     GNU GENERAL PUBLIC LICENSE
                        Version 3, 29 June 2007
 

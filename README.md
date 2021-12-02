@@ -46,8 +46,18 @@ Configures fail2ban monitoring for SSH and the Proxmox GUI.
 ## setup_smartd
 Configures disk health monitoring with the smartmontools smartd daemon
 
-## backup
-Backs up Proxmox config files
+## backup_config
+Backs up Proxmox config files.
+You must edit vars in this script manually.
+Adapted from https://github.com/DerDanilo/proxmox-stuff
+
+General steps for use:
+-Make sure local backup directory exists and has proper permissions
+-"" remote directory
+-Set up auto-login SSH (SSH Keys) from backup source host to remote host
+-Set MAX_BACKUPS number to keep
+-Test run script
+-Schedule script to run with cron
 
 ## alert_dataset_not_mounted
 Sends an alert if any one ZFS dataset is not mounted.

@@ -154,7 +154,6 @@ configure_motd() {
 #printf "\nThis is a production server\n\n"
 printf "\$(pveversion)\n"
 figlet \$(hostname)
-printf "\nVMs on this node:\n\$(qm list)\n\nUptime: \$(uptime)\n\n**BE CAREFUL!**\n\n"
 EOF
   chmod 755 "$file"
   /bin/bash "$file"

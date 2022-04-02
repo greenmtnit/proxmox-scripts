@@ -127,7 +127,7 @@ send_alert() {
     message="Warning! One or more ZFS datasets are not mounted on $(hostname -f). Time: $(date '+%a %Y%m%d %H:%M:%S')."
     local subject
     subject="ZFS Dataset unmounted alert on $(hostname -f)"
-    echo "$message" | mail -s "$subject" "$dest_addr" 
+    echo "$message" | mail -s "$subject" "$dest_addr" -a "FROM:$from_addr" 
   fi
 }
 

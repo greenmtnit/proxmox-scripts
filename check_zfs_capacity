@@ -124,7 +124,7 @@ send_email_alert() {
   subject="ZFS Capacity Alert on $(hostname -f)"
   local message
   message="Warning! The used capacity on one or more ZFS pools on $(hostname -f) is greater than $max_percent%. Time: $(date '+%a %Y%m%d %H:%M:%S')."
-  echo "$message" | mail -s "$subject" "$dest_addr" 
+  echo "$message" | mail -s "$subject" "$dest_addr" -a "FROM:$from_addr"
 }
 
 run_test() {
@@ -133,7 +133,7 @@ run_test() {
     subject="TEST ZFS Capacity Alert on $(hostname -f)"
     local message
     message="THIS IS ONLY A TEST. Warning! The used capacity on one or more ZFS pools on $(hostname -f) is greater than $max_percent%. Time: $(date '+%a %Y%m%d %H:%M:%S')."
-    echo "$message" | mail -s "$subject" "$dest_addr" 
+    echo "$message" | mail -s "$subject" "$dest_addr" -a "FROM:$from_addr" 
   fi
 }
 

@@ -1,0 +1,144 @@
+#!/bin/bash
+#
+# Sends an email alert if recent backups aren't found.  
+# 
+# Original author: Tim West <tim@greenmtnit.com>
+#
+# Copyright (C) 2022 Green Mountain IT Solutions, LLC <info@greenmtnit.com>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
+PROGNAME=$(basename "$0")
+readonly PROGNAME
+
+PROGDIR=$(readlink -m "$(dirname "$0")")
+readonly PROGDIR
+
+# Print an error message to stderr in red
+print_err() {
+  tput setaf 1
+  printf -- '[ERROR] %s\n' "${*}" >&2
+  tput sgr0
+}
+
+# Print an error message in red and exit the script
+die() {
+  print_err "${*}"
+  exit 1
+}
+
+show_help() {
+    cat <<EOF
+    Usage: $PROGNAME options
+
+    This script checks for recent ZFS snapshot backups on rsync.net storage and sends an email alert if none are found.
+    You should add it to the crontab to run every 15 minutes, e.g.:
+    */15 * * * * /usr/bin/monitor_backups --dest myemail@mycompany.com 
+   
+    Options:
+       -d --dest              Destination to send emails to. 
+       -h --help              Show this help.
+       -t --test              Test mode; send a test email.
+    Examples:
+       Run the check and send an email to me@mydomain.com if no recent backups are found:
+       $PROGNAME -d me@mydomain.com
+EOF
+}
+
+# Initialize all the option variables.
+# This ensures we are not contaminated by variables from the environment.
+dest_addr=
+do_test=
+
+if [[ -z "$1" ]]; then
+  print_err "No arguments given. This program requires arguments."
+  show_help
+  exit 
+fi
+
+while :; do
+    case $1 in
+        -h|-\?|--help)
+            show_help    # Display a usage synopsis.
+            exit
+            ;;
+        -d|--dest)       # Destination email address.
+            if [[ "$2" ]]; then
+                dest_addr="$2"
+                shift
+            else
+                die 'ERROR: "--dest" requires a non-empty option argument.'
+            fi
+	    ;;
+	-t|--test)       # Test mode; sends a message indicating this is only a test.
+	    do_test="1"
+            ;;
+	--)
+            shift
+            break
+	    ;;
+        -?*)
+            printf 'WARNING: Unknown option (ignored): %s\n' "$1" >&2
+            ;;
+        *)               # Default case: No more options, so break out of the loop.
+            break
+    esac
+
+    shift
+done
+
+check_options() {
+  if [[ -z "$dest_addr" ]]; then
+    print_err "You must set a destination email address using --dest."
+    show_help
+    exit 1
+  fi
+}
+
+check_test() {
+  if [[ "$do_test" ]]; then
+    subject="test backup alert on $(hostname -f)"
+    message="this is only a test. warning! no recent backups were found on rsync.net storage for system $(hostname -f). Time: $(date '+%a %y%m%d %h:%m:%s'). You should investigate!"
+    echo "$message" | mail -s "$subject" "$dest_addr" 
+  fi
+}
+
+send_email() {
+  local subject
+  local message
+  subject="Backup Alert on $(hostname -f)"
+  message="Warning! No recent backups were found on rsync.net storage for system $(hostname -f) has . Time: $(date '+%a %Y%m%d %H:%M:%S'). You should investigate."
+  echo "$message" | mail -s "$subject" "$dest_addr" 
+}
+
+check_backups() {
+  local date
+  date=$(date -d yesterday '+%Y-%m-%d')
+  echo "Looking for backups from $date"
+  if [[ $(ssh rsync.net "zfs list -t snap -o name" | grep $date ) ]] ; then
+    echo "Found backups from $date"
+  else 
+    echo "WARNING! No backups found!"
+    send_email
+  fi
+}
+
+main() {
+  #check_options
+  #check_test
+  check_backups 
+}
+
+main

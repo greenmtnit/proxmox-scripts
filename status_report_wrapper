@@ -1,0 +1,14 @@
+#!/bin/bash
+dest_addr="tim@greenmtnit.com"
+
+send_email() {
+  local subject
+  subject="Scheduled PVE Status Report From $(hostname -f)"
+  #echo "$message" | mail -s "$subject" "$dest_addr" -A "$report"
+  cat $tmpfile | mail -s "$subject" "$dest_addr"
+}
+
+tmpfile=$(mktemp)
+/usr/bin/status-report > $tmpfile
+send_email
+rm $tmpfile

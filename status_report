@@ -1,0 +1,343 @@
+#!/bin/bash
+#
+# Peforms status checks of a Proxmox Virtual Environment system
+# 
+# Original author: Tim West <tim@greenmtnit.com>
+#
+# Copyright (C) 2022 Green Mountain IT Solutions, LLC <info@greenmtnit.com>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
+PROGNAME=$(basename "$0")
+readonly PROGNAME
+
+PROGDIR=$(readlink -m "$(dirname "$0")")
+readonly PROGDIR
+
+# Print an error message to stderr in red
+add_warning() {
+  tput setaf 1
+  warnings+="\n$1"
+  printf -- '[ERROR] %s\n' "${*}" >&2
+  tput sgr0
+}
+
+# Print an error message in red and exit the script
+die() {
+  print_err "${*}"
+  exit 1
+}
+
+show_help() {
+    cat <<EOF
+    Usage: $PROGNAME options
+
+    This script performs status checks of a Proxmox Virtual Environment system and optionally sends the results as an email. 
+
+    Options:
+       -d --dest              Destination to send email alerts to. 
+       -h --help              Show this help.
+
+    
+    Examples:
+      Perform status checks and send the results in an email to me@mydomain.com
+      $PROGNAME --dest me@mydomain.com
+EOF
+}
+
+# Initialize variables.
+# This ensures we are not contaminated by variables from the environment.
+dest_addr=
+do_test=
+warnings=
+results=
+
+while :; do
+    case $1 in
+        -h|-\?|--help)
+            show_help    # Display a usage synopsis.
+            exit
+            ;;
+        -d|--dest)       # Destination email address for alerts.
+            if [[ "$2" ]]; then
+                dest_addr="$2"
+		send_email="1"
+                shift
+            fi
+            ;;
+        --)              # End of all options.
+            shift
+            break
+            ;;
+        -?*)
+            printf 'WARN: Unknown option (ignored): %s\n' "$1" >&2
+            ;;
+        *)               # Default case: No more options, so break out of the loop.
+            break
+    esac
+    shift
+done
+
+send_email() {
+  echo "Sending email..."
+  local subject
+  subject="PVE Status Alert on $(hostname -f)"
+  echo "$1" | mail -s "$subject" "$dest_addr" #-a "FROM:$from_addr"
+}
+
+write_header() {
+  echo -e "##### STATUS REPORT SCRIPT #####\nRun on host $(hostname -f) at $(date).\n##########"
+}
+
+check_uptime() {
+  local uptime
+  uptime=$(uptime | awk '/days?/ {print $3; next}; {print 0}')
+  echo -e "\n##### System Uptime: $(uptime). #####"
+  if (( $uptime > 30 )); then
+    add_warning "System uptime is greater than 30 days. You should investigate why the system is not rebooting monthly."
+  fi
+}
+
+check_zfs_list () {
+  echo -e "\n##### Checking storage usage. #####"
+  zfs list
+  readarray zpool_used  < <(/sbin/zpool list |awk -F ' ' 'FNR == 1 {next} {gsub(/\%/, " ", $8)} {print $8}')
+  for i in "${zpool_used[@]}"
+  do
+    if (( $i > "85" )); then
+       add_warning "One or more zpools are over 85% used."
+    fi
+  done
+}
+
+check_zpool_status() {
+  echo -e "\n##### Checking storage pool health. #####"
+  zpool status
+  if ! zpool status -x | grep -i "all pools are healthy"; then
+    add_warning "One or more zpools are in an error state!"
+  fi
+}
+
+check_smart_data() {
+
+  echo -e "\n##### Checking disk health. #####"
+  #Print output even if no errors
+  DEBUG=on
+  
+  smartcheck() {
+  error=0
+  # Obtain the serial
+  
+  smartoutput=$(smartctl -v 1,raw48:54 -v 7,raw48:54 -v 195,raw48:54 -a $1)
+  serial=`echo "$smartoutput" | egrep "Serial Number:|Serial number:" | grep -v "\[No" | awk '{print $3}'`
+  if [[ "${SERIALS[@]}" =~ "${serial}" ]] &&  [ ${serial} ]; then
+  	# we've seen this serial before from another device
+  	return 0;
+  fi
+  if [ ${serial} ]
+  then
+  	SERIALS+=(${serial})
+  	if [ ${DEBUG} ]
+  	then
+  		echo -e "---"
+  		echo -e "Scanning $1 Serial: ${serial} "
+  	fi
+  fi
+  
+  # SSD Wear Level
+  
+  #var=`smartctl -a $1 | grep Wear_Leveling | awk '{print $4}' | sed 's/^0\|^00//'`
+  var=`echo "$smartoutput" | egrep -i "177 Wear_Leveling|231 SSD_Life_Left|^173 Un|233 Media_Wearout_" | awk '{print $4}' | sed 's/^0\|^00//' | head -n 1`
+  if [[ ${var#0} -lt 20 ]] && [[ ${var#0} -gt 0 ]]
+  then
+  	echo -e "\e[0;41m$1 is at ${var#0}% SSD wear life remaining\e[0m"
+  	error=$(($error + 1))
+  elif [ ${DEBUG} ] && [[ ${var#0} -gt 0 ]]
+  then
+  	echo -e "$1 is at ${var#0}% SSD wear life remaining"
+  fi
+  
+  
+  # Reallocated sectors on SATA drives
+  
+  #var=`smartctl -a $1 | grep Reallocated_Sector | awk '{print $10}' `
+  var=`echo "$smartoutput" | grep Reallocated_Sector | awk '{print $10}' `
+  if [[ $var -gt 0 ]]
+  then
+  	echo -e "\e[0;41m$1 has $var Sector Errors\e[0m"
+  	error=$(($error + 1))
+  elif [ ${DEBUG} ] && [[ $var =~ ^[0-9]+$  ]]
+  then
+  	echo -e "$1 has $var Sector Errors"
+  fi
+  
+  # Early Warning Uncorrectable
+  
+  #var=`smartctl -a $1 | grep Uncorrectable | awk '{print $10}' `
+  var=`echo "$smartoutput" | grep Uncorrectable | awk '{print $10}' `
+  if [[ $var -gt 0 ]]
+  then
+  	echo -e "\e[0;41m$1 has $var Uncorrectable Errors\e[0m"
+  	error=$(($error + 1))
+  elif [ ${DEBUG} ] && [[ $var =~ ^[0-9]+$  ]]
+  then
+  	echo -e "$1 has $var Uncorrectable Errors"
+  fi
+  
+  # Early Warning Raw_Read_Error_Rate
+  
+  var=`echo "$smartoutput" | egrep -i "1 Raw_Read_Error_Rate" | awk '{print $10}' | sed 's/^0\|^00//'`
+  if [[ ${var#0} -gt 10 ]] && [[ ${var#0} -gt 0 ]]
+  then
+  	echo -e "\e[0;41m$1 has a Read Error Rate of ${var#0}\e[0m"
+  	error=$(($error + 1))
+  elif [ ${DEBUG} ] && [[ ${var#0} -gt 0 ]]
+  then
+  	echo -e "$1 has a Read Error Rate of ${var#0} "
+  fi
+  
+  
+  # SAS Read errors
+  
+  #var=`smartctl -a $1 | egrep "read:" | awk '{print $8}'`
+  var=`echo "$smartoutput" | egrep "read:" | awk '{print $8}'`
+  if [[ $var -gt 0 ]]
+  then
+  	echo -e "\e[0;41m$1 $var SAS Read Errors\e[0m"
+  	sas=1
+  	error=$(($error + 1))
+  elif [ ${DEBUG} ] && [[ $var =~ ^[0-9]+$ ]]
+  then
+  	echo -e "$1 $var SAS Read Errors"
+  fi
+  
+  # SAS Write errors
+  
+  #var=`smartctl -a $1 | egrep "write:" | awk '{print $8}'`
+  var=`echo "$smartoutput"  | egrep "write:" | awk '{print $8}'`
+  if [[ $var -gt 0 ]]
+  then
+  	echo -e "\e[0;41m$1 $var SAS Write Errors\e[0m"
+  	sas=1
+  	error=$(($error + 1))
+  elif [ ${DEBUG} ] && [[ $var =~ ^[0-9]+$ ]]
+  then
+  	echo -e "$1 $var SAS Write Errors"
+  fi
+  
+  # SAS Verify errors
+  
+  #var=`smartctl -a $1 | egrep "verify:" | awk '{print $8}'`
+  var=`echo "$smartoutput"  | egrep "verify:" | awk '{print $8}'`
+  if [[ $var -gt 0 ]]
+  then
+  	echo -e "\e[0;41m$1 $var SAS Verify Errors\e[0m"
+  	sas=1
+  	error=$(($error + 1))
+  elif [ ${DEBUG} ] && [[ $var =~ ^[0-9]+$ ]]
+  then
+  	echo -e "$1 $var SAS Verify Errors"
+  fi
+  
+  # SAS post factory defects
+  
+  var=`echo "$smartoutput"  | grep -i "grown defect" | sed 's/Elements in grown defect list: //' | grep -iv "not available"`
+  if [[ $var -gt 0 ]] && [ ${DEBUG} ]
+  then
+  	sleep 0
+  	echo -e "\e[30;43m$1 $var SAS accumulated defects\e[0m"
+  	#error=$(($error + 1))
+  elif [ ${DEBUG} ] && [[ $var =~ ^[0-9]+$ ]]
+  then
+  	echo -e "$1 $var SAS accumulated defects"
+  fi
+  
+  # Self-test results
+  testresults=$(smartctl -l selftest $i | egrep "Short | Extended")
+  var=`echo "$testresults" | grep -v "Completed without error" `
+  if [ "$var" ]
+  then
+  	echo -e "\e[0;41m$1 has a failed self-test!\e[0m"
+  	echo -e "Latest 5 test results:\n$(echo "$testresults" | head -n 5)"
+  	error=$(($error + 1))
+  elif [ ${DEBUG} ] 
+  then
+  	echo -e "$1 has no failed self-tests"
+  fi
+  
+  return $error
+  }
+  if [ ! -x "$(command -v smartctl)" ]
+  then
+  echo "Error: Smartctl command not found"
+  exit 1
+  fi
+  
+  agerror=0
+  
+  # Check disks attached to the board directly or in passthrough
+  #for i in `ls /dev/sd*|egrep '^(\/)dev(\/)sd[a-z]$'`;
+  for i in `find /dev -type b -name 'sd*' | egrep '^(\/)dev(\/)sd[a-z]$'`;
+  do
+  smartcheck $i $DEBUG
+  rval=$?
+  agerror=$(($agerror + $rval))
+  done
+  
+  if (( $agerror > 0 )); then 
+  add_warning "SMART warnings found!"
+  fi
+  
+}
+
+check_zfs_snapshots() {
+  local date
+  date=$(date -d '-2 day' '+%Y-%m-%d')
+  if ! [[ $(zfs list -t snap -o name | grep $date ) ]] ; then
+     add_warning "No recent local backups found!"
+  fi
+  echo -e "\n##### Listing Local Snapshots #####"
+  zfs list -t snap -o name
+  if grep "rsync.net" /root/.ssh/config; then
+    echo -e "\n##### Listing Remote Snapshots #####"
+    ssh rsync.net "zfs list -t snap -o name"
+    if ! [[ $(ssh rsync.net "zfs list -t snap -o name" | grep $date ) ]] ; then
+       add_warning "No recent remote backups found!"
+    fi
+  fi
+}
+
+check_warnings() {
+  if [ -z "$warnings" ]; then
+    echo -e "\n##### No warnings found. #####"
+  else
+    echo -e "\n##### WARNINGS FOUND! #####\n$warnings"
+    if [ $send_email ]; then
+      send_email "Warnings found: $warnings."
+    fi
+  fi
+}
+
+main() {
+  write_header
+  check_uptime
+  check_zfs_list
+  check_zpool_status
+  check_smart_data
+  check_zfs_snapshots
+  check_warnings
+}
+
+main

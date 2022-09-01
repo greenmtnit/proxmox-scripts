@@ -9,6 +9,6 @@ send_email() {
 }
 
 tmpfile=$(mktemp)
-/usr/bin/status-report > $tmpfile
+/usr/bin/status_report > $tmpfile
 send_email
 rm $tmpfile
